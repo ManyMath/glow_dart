@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Build the Rust static library for macOS targets.
-# Called by the CocoaPods script_phase in flutter_opengl.podspec.
+# Called by the CocoaPods script_phase in glow.podspec.
 #
 # Environment variables set by Xcode/CocoaPods:
 #   CONFIGURATION       - Debug or Release

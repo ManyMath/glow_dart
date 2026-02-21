@@ -109,6 +109,82 @@ impl UniformQueue {
         }
     }
 
+    /// Update from owned queue bytes without assuming pointer alignment or
+    /// reading beyond the sender's allocation. Length/type mismatches leave
+    /// the existing value unchanged.
+    pub fn set_uniform_value_bytes(&mut self, name: &str, data: &[u8]) -> bool {
+        let Some(existing) = self.uniforms.get_mut(name) else {
+            return false;
+        };
+        match existing {
+            UniformValue::Bool(value) => {
+                let [byte] = data else {
+                    return false;
+                };
+                if *byte > 1 {
+                    return false;
+                }
+                *value = *byte != 0;
+            }
+            UniformValue::Int(value) => {
+                let Ok(bytes) = data.try_into() else {
+                    return false;
+                };
+                *value = i32::from_ne_bytes(bytes);
+            }
+            UniformValue::Float(value) => {
+                let Ok(bytes) = data.try_into() else {
+                    return false;
+                };
+                *value = f32::from_ne_bytes(bytes);
+            }
+            UniformValue::Vec2(value) => {
+                let Some(next) = float_array(data) else {
+                    return false;
+                };
+                *value = next;
+            }
+            UniformValue::Vec3(value) => {
+                let Some(next) = float_array(data) else {
+                    return false;
+                };
+                *value = next;
+            }
+            UniformValue::Vec4(value) | UniformValue::Mat2(value) => {
+                let Some(next) = float_array(data) else {
+                    return false;
+                };
+                *value = next;
+            }
+            UniformValue::Mat3(value) => {
+                let Some(next) = float_array(data) else {
+                    return false;
+                };
+                *value = next;
+            }
+            UniformValue::Mat4(value) => {
+                let Some(next) = float_array(data) else {
+                    return false;
+                };
+                *value = next;
+            }
+            UniformValue::Sampler2D(sampler) => {
+                let Ok(width) = usize::try_from(sampler.width) else {
+                    return false;
+                };
+                let Ok(height) = usize::try_from(sampler.height) else {
+                    return false;
+                };
+                if width.checked_mul(height).and_then(|n| n.checked_mul(4)) != Some(data.len()) {
+                    return false;
+                }
+                sampler.data.clear();
+                sampler.data.extend_from_slice(data);
+            }
+        }
+        true
+    }
+
     /// Update an existing uniform's value from a raw pointer.
     /// For Sampler2D, val_ptr is treated as raw RGBA pixel data.
     pub fn set_uniform_value(&mut self, name: &str, val_ptr: *const c_void) -> bool {
@@ -327,5 +403,92 @@ unsafe fn read_uniform_value(uniform_type: UniformType, val_ptr: *const c_void) 
             cloned.n_texture = sampler_ref.n_texture;
             UniformValue::Sampler2D(cloned)
         }
+    }
+}
+
+fn float_array<const N: usize>(data: &[u8]) -> Option<[f32; N]> {
+    if data.len() != N * std::mem::size_of::<f32>() {
+        return None;
+    }
+    let mut result = [0.0; N];
+    for (value, bytes) in result.iter_mut().zip(data.chunks_exact(4)) {
+        *value = f32::from_ne_bytes(bytes.try_into().ok()?);
+    }
+    Some(result)
+}
+
+#[cfg(test)]
+mod byte_update_tests {
+    use super::*;
+
+    #[test]
+    fn scalar_updates_preserve_native_types_and_reject_bad_lengths() {
+        let mut queue = UniformQueue::new();
+        queue
+            .uniforms
+            .insert("flag".into(), UniformValue::Bool(false));
+        queue.uniforms.insert("count".into(), UniformValue::Int(7));
+        queue
+            .uniforms
+            .insert("amount".into(), UniformValue::Float(0.0));
+        assert!(queue.set_uniform_value_bytes("flag", &[1]));
+        assert!(matches!(queue.uniforms["flag"], UniformValue::Bool(true)));
+        assert!(!queue.set_uniform_value_bytes("flag", &[2]));
+        assert!(!queue.set_uniform_value_bytes("flag", &[]));
+        assert!(queue.set_uniform_value_bytes("count", &(-42_i32).to_ne_bytes()));
+        assert!(matches!(queue.uniforms["count"], UniformValue::Int(-42)));
+        assert!(!queue.set_uniform_value_bytes("count", &[0; 64]));
+        assert!(!queue.set_uniform_value_bytes("missing", &[0]));
+        assert!(queue.set_uniform_value_bytes("amount", &3.25_f32.to_ne_bytes()));
+        assert!(matches!(
+            queue.uniforms["amount"],
+            UniformValue::Float(3.25)
+        ));
+        assert!(!queue.set_uniform_value_bytes("amount", &[0; 3]));
+        assert!(matches!(queue.uniforms["count"], UniformValue::Int(-42)));
+    }
+
+    #[test]
+    fn vector_and_matrix_lengths_are_exact() {
+        let mut queue = UniformQueue::new();
+        queue
+            .uniforms
+            .insert("vector".into(), UniformValue::Vec2([0.0; 2]));
+        queue
+            .uniforms
+            .insert("matrix".into(), UniformValue::Mat4([0.0; 16]));
+        let bytes: Vec<u8> = [2.5_f32, -3.0]
+            .into_iter()
+            .flat_map(f32::to_ne_bytes)
+            .collect();
+        assert!(queue.set_uniform_value_bytes("vector", &bytes));
+        assert!(matches!(
+            queue.uniforms["vector"],
+            UniformValue::Vec2([2.5, -3.0])
+        ));
+        assert!(!queue.set_uniform_value_bytes("matrix", &bytes));
+        let bytes: Vec<u8> = [1.0_f32; 16]
+            .into_iter()
+            .flat_map(f32::to_ne_bytes)
+            .collect();
+        assert!(queue.set_uniform_value_bytes("matrix", &bytes));
+    }
+
+    #[test]
+    fn sampler_updates_copy_full_pixels_and_replace_instead_of_append() {
+        let mut sampler = Sampler2D::new();
+        sampler.width = 8;
+        sampler.height = 8;
+        sampler.data = vec![1; 256];
+        let mut queue = UniformQueue::new();
+        queue
+            .uniforms
+            .insert("image".into(), UniformValue::Sampler2D(sampler));
+        assert!(!queue.set_uniform_value_bytes("image", &[2; 64]));
+        assert!(queue.set_uniform_value_bytes("image", &[3; 256]));
+        let UniformValue::Sampler2D(sampler) = &queue.uniforms["image"] else {
+            panic!("wrong type");
+        };
+        assert_eq!(sampler.data, vec![3; 256]);
     }
 }

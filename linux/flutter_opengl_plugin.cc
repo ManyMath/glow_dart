@@ -1,4 +1,4 @@
-#include "include/flutter_opengl/flutter_opengl_plugin.h"
+#include "include/glow/flutter_opengl_plugin.h"
 
 #include <flutter_linux/flutter_linux.h>
 #include <flutter_linux/fl_view.h>

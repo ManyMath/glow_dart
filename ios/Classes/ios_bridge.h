@@ -10,6 +10,8 @@
 #import <CoreVideo/CoreVideo.h>
 #include <dlfcn.h>
 #include <stdint.h>
+#include <stddef.h>
+#include <stdbool.h>
 
 #import "FlutterOpenglTexture.h"
 
@@ -29,7 +31,7 @@ typedef struct {
     void  (*clear_context)(void *user_data);
     unsigned char *(*get_pixel_buffer)(void *user_data);
     void  (*mark_frame_available)(void *user_data);
-    int   (*swap_buffers)(void *user_data);       /* returns bool (0/1) */
+    bool  (*swap_buffers)(void *user_data);       /* returns bool (0/1) */
     const void *(*load_gl_proc)(const char *name);
 
     /* Opaque pointer passed back to every callback */
@@ -79,7 +81,7 @@ enum UniformType {
 extern void  createRenderer(PlatformContext *ctx);
 extern void  deleteRenderer(void);
 extern void *getRenderer(void);
-extern int   rendererStatus(void);  /* returns bool */
+extern bool   rendererStatus(void);  /* returns bool */
 
 /* Texture queries */
 extern void  getTextureSize(int32_t *width, int32_t *height);
@@ -89,7 +91,7 @@ extern void  startThread(void);
 extern void  stopThread(void);
 
 /* Shader compilation */
-extern const char *setShader(int isContinuous,
+extern const char *setShader(bool isContinuous,
                              const char *vertexShader,
                              const char *fragmentShader);
 extern const char *setShaderToy(const char *fragmentShader);
@@ -111,22 +113,24 @@ extern void  setMousePosition(double posX, double posY,
 extern double getFPS(void);
 
 /* Generic uniforms */
-extern int   addUniform(const char *name, int32_t type, void *val);
-extern int   removeUniform(const char *name);
-extern int   setUniform(const char *name, void *val);
+extern bool   addUniform(const char *name, int32_t type, void *val);
+extern bool   removeUniform(const char *name);
+/* Legacy unsized setter returns false; use the length-aware entrypoint. */
+extern bool   setUniform(const char *name, void *val);
+extern bool setUniformSized(const char *name, const void *val, size_t byte_len);
 
 /* Sampler2D uniforms */
-extern int   addSampler2DUniform(const char *name,
+extern bool   addSampler2DUniform(const char *name,
                                   int32_t width, int32_t height,
                                   void *val);
-extern int   replaceSampler2DUniform(const char *name,
+extern bool   replaceSampler2DUniform(const char *name,
                                       int32_t width, int32_t height,
                                       void *val);
 
 /* Capture stubs */
-extern int   startCaptureOnSampler2D(const char *name,
+extern bool   startCaptureOnSampler2D(const char *name,
                                       const char *completeFilePath);
-extern int   stopCapture(void);
+extern bool   stopCapture(void);
 
 /* Miscellaneous */
 extern void  nativeSurfaceSetClearColor(int32_t r, int32_t g,

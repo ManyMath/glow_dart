@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
-  s.name             = 'flutter_opengl'
-  s.version          = '0.0.1'
+  s.name             = 'glow'
+  s.version          = '0.0.2'
   s.summary          = 'Flutter OpenGL plugin for iOS'
   s.description      = 'Flutter plugin to bind a Texture widget to an OpenGL ES context on iOS.'
   s.homepage         = 'https://github.com/alnitak/flutter_opengl'

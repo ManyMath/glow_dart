@@ -3,7 +3,7 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
-  flutter_opengl
+  glow
   url_launcher_linux
 )
 

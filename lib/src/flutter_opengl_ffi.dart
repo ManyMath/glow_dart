@@ -24,12 +24,12 @@ class FlutterOpenGLFfi {
 
   /// Returns true if the texture has been created.
   bool rendererStatus() {
-    return _rendererStatus() == 0 ? false : true;
+    return _rendererStatus();
   }
 
   late final _rendererStatusPtr =
-      _lookup<ffi.NativeFunction<ffi.Int Function()>>('rendererStatus');
-  late final _rendererStatus = _rendererStatusPtr.asFunction<int Function()>();
+      _lookup<ffi.NativeFunction<ffi.Bool Function()>>('rendererStatus');
+  late final _rendererStatus = _rendererStatusPtr.asFunction<bool Function()>();
 
   /// Get the texture size, or Size(-1, -1) if not set.
   Size getTextureSize() {
@@ -46,10 +46,10 @@ class FlutterOpenGLFfi {
 
   late final _textureSizePtr = _lookup<
       ffi.NativeFunction<
-          ffi.Int Function(ffi.Pointer<ffi.Int32>,
+          ffi.Void Function(ffi.Pointer<ffi.Int32>,
               ffi.Pointer<ffi.Int32>)>>('getTextureSize');
   late final _textureSize = _textureSizePtr.asFunction<
-      int Function(ffi.Pointer<ffi.Int32>, ffi.Pointer<ffi.Int32>)>();
+      void Function(ffi.Pointer<ffi.Int32>, ffi.Pointer<ffi.Int32>)>();
 
   /// Start the drawing thread loop. No-op if already running.
   void startThread() {
@@ -78,7 +78,7 @@ class FlutterOpenGLFfi {
     String fragmentShader,
   ) {
     ffi.Pointer<ffi.Char> err = _setShader(
-      isContinuous ? 1 : 0,
+      isContinuous,
       vertexShader.toNativeUtf8().cast<ffi.Char>(),
       fragmentShader.toNativeUtf8().cast<ffi.Char>(),
     );
@@ -88,11 +88,11 @@ class FlutterOpenGLFfi {
 
   late final _setShaderPtr = _lookup<
       ffi.NativeFunction<
-          ffi.Pointer<ffi.Char> Function(ffi.Int, ffi.Pointer<ffi.Char>,
+          ffi.Pointer<ffi.Char> Function(ffi.Bool, ffi.Pointer<ffi.Char>,
               ffi.Pointer<ffi.Char>)>>('setShader');
   late final _setShader = _setShaderPtr.asFunction<
       ffi.Pointer<ffi.Char> Function(
-          int, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>)>();
+          bool, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>)>();
 
   /// Set a ShaderToy fragment shader (image layer only).
   ///
@@ -215,13 +215,13 @@ class FlutterOpenGLFfi {
     ffi.Pointer<ffi.Bool> valT = calloc(ffi.sizeOf<ffi.Bool>());
     valT.value = val;
 
-    int ret = _addUniform(
+    bool ret = _addUniform(
       name.toNativeUtf8().cast<ffi.Char>(),
       UniformType.uniformBool.index,
       valT.cast<ffi.Void>(),
     );
     calloc.free(valT);
-    return ret == 0 ? false : true;
+    return ret;
   }
 
   /// * add INT
@@ -229,13 +229,13 @@ class FlutterOpenGLFfi {
     ffi.Pointer<ffi.Int32> valT = calloc(ffi.sizeOf<ffi.Int32>());
     valT.value = val;
 
-    int ret = _addUniform(
+    bool ret = _addUniform(
       name.toNativeUtf8().cast<ffi.Char>(),
       UniformType.uniformInt.index,
       valT.cast<ffi.Void>(),
     );
     calloc.free(valT);
-    return ret == 0 ? false : true;
+    return ret;
   }
 
   /// * add FLOAT
@@ -243,13 +243,13 @@ class FlutterOpenGLFfi {
     ffi.Pointer<ffi.Float> valT = calloc(ffi.sizeOf<ffi.Float>());
     valT.value = val;
 
-    int ret = _addUniform(
+    bool ret = _addUniform(
       name.toNativeUtf8().cast<ffi.Char>(),
       UniformType.uniformFloat.index,
       valT.cast<ffi.Void>(),
     );
     calloc.free(valT);
-    return ret == 0 ? false : true;
+    return ret;
   }
 
   /// * add VEC2
@@ -263,13 +263,13 @@ class FlutterOpenGLFfi {
       valT[i] = val[i];
     }
 
-    int ret = _addUniform(
+    bool ret = _addUniform(
       name.toNativeUtf8().cast<ffi.Char>(),
       UniformType.uniformVec2.index,
       valT.cast<ffi.Void>(),
     );
     calloc.free(valT);
-    return ret == 0 ? false : true;
+    return ret;
   }
 
   /// * add VEC3
@@ -283,13 +283,13 @@ class FlutterOpenGLFfi {
       valT[i] = val[i];
     }
 
-    int ret = _addUniform(
+    bool ret = _addUniform(
       name.toNativeUtf8().cast<ffi.Char>(),
       UniformType.uniformVec3.index,
       valT.cast<ffi.Void>(),
     );
     calloc.free(valT);
-    return ret == 0 ? false : true;
+    return ret;
   }
 
   /// * add VEC4
@@ -303,13 +303,13 @@ class FlutterOpenGLFfi {
       valT[i] = val[i];
     }
 
-    int ret = _addUniform(
+    bool ret = _addUniform(
       name.toNativeUtf8().cast<ffi.Char>(),
       UniformType.uniformVec4.index,
       valT.cast<ffi.Void>(),
     );
     calloc.free(valT);
-    return ret == 0 ? false : true;
+    return ret;
   }
 
   /// * add MAT2
@@ -323,13 +323,13 @@ class FlutterOpenGLFfi {
       valT[i] = val[i];
     }
 
-    int ret = _addUniform(
+    bool ret = _addUniform(
       name.toNativeUtf8().cast<ffi.Char>(),
       UniformType.uniformMat2.index,
       valT.cast<ffi.Void>(),
     );
     calloc.free(valT);
-    return ret == 0 ? false : true;
+    return ret;
   }
 
   /// * add MAT3
@@ -343,13 +343,13 @@ class FlutterOpenGLFfi {
       valT[i] = val[i];
     }
 
-    int ret = _addUniform(
+    bool ret = _addUniform(
       name.toNativeUtf8().cast<ffi.Char>(),
       UniformType.uniformMat3.index,
       valT.cast<ffi.Void>(),
     );
     calloc.free(valT);
-    return ret == 0 ? false : true;
+    return ret;
   }
 
   /// * add MAT4
@@ -363,35 +363,35 @@ class FlutterOpenGLFfi {
       valT[i] = val[i];
     }
 
-    int ret = _addUniform(
+    bool ret = _addUniform(
       name.toNativeUtf8().cast<ffi.Char>(),
       UniformType.uniformMat4.index,
       valT.cast<ffi.Void>(),
     );
     calloc.free(valT);
-    return ret == 0 ? false : true;
+    return ret;
   }
 
   late final _addUniformPtr = _lookup<
       ffi.NativeFunction<
-          ffi.Int Function(ffi.Pointer<ffi.Char>, ffi.Int32,
+          ffi.Bool Function(ffi.Pointer<ffi.Char>, ffi.Int32,
               ffi.Pointer<ffi.Void>)>>('addUniform');
   late final _addUniform = _addUniformPtr.asFunction<
-      int Function(ffi.Pointer<ffi.Char>, int, ffi.Pointer<ffi.Void>)>();
+      bool Function(ffi.Pointer<ffi.Char>, int, ffi.Pointer<ffi.Void>)>();
 
   /// Remove a uniform by name.
   bool removeUniform(String name) {
-    int ret = _removeUniform(
+    bool ret = _removeUniform(
       name.toNativeUtf8().cast<ffi.Char>(),
     );
-    return ret == 0 ? false : true;
+    return ret;
   }
 
   late final _removeUniformPtr =
-      _lookup<ffi.NativeFunction<ffi.Int Function(ffi.Pointer<ffi.Char>)>>(
+      _lookup<ffi.NativeFunction<ffi.Bool Function(ffi.Pointer<ffi.Char>)>>(
           'removeUniform');
   late final _removeUniform =
-      _removeUniformPtr.asFunction<int Function(ffi.Pointer<ffi.Char>)>();
+      _removeUniformPtr.asFunction<bool Function(ffi.Pointer<ffi.Char>)>();
 
   /// Add a Sampler2D uniform. [val] must be RGBA32.
   bool addSampler2DUniform(
@@ -410,22 +410,22 @@ class FlutterOpenGLFfi {
       valT[i] = val[i];
     }
 
-    int ret = _addSampler2DUniform(
+    bool ret = _addSampler2DUniform(
       name.toNativeUtf8().cast<ffi.Char>(),
       width,
       height,
       valT.cast<ffi.Void>(),
     );
     calloc.free(valT);
-    return ret == 0 ? false : true;
+    return ret;
   }
 
   late final _addSampler2DUniformPtr = _lookup<
       ffi.NativeFunction<
-          ffi.Int Function(ffi.Pointer<ffi.Char>, ffi.Int32, ffi.Int32,
+          ffi.Bool Function(ffi.Pointer<ffi.Char>, ffi.Int32, ffi.Int32,
               ffi.Pointer<ffi.Void>)>>('addSampler2DUniform');
   late final _addSampler2DUniform = _addSampler2DUniformPtr.asFunction<
-      int Function(ffi.Pointer<ffi.Char>, int, int, ffi.Pointer<ffi.Void>)>();
+      bool Function(ffi.Pointer<ffi.Char>, int, int, ffi.Pointer<ffi.Void>)>();
 
   /// Replace a Sampler2D uniform texture (may differ in size).
   bool replaceSampler2DUniform(
@@ -444,22 +444,22 @@ class FlutterOpenGLFfi {
       valT[i] = val[i];
     }
 
-    int ret = _replaceSampler2DUniform(
+    bool ret = _replaceSampler2DUniform(
       name.toNativeUtf8().cast<ffi.Char>(),
       width,
       height,
       valT.cast<ffi.Void>(),
     );
     calloc.free(valT);
-    return ret == 0 ? false : true;
+    return ret;
   }
 
   late final _replaceSampler2DUniformPtr = _lookup<
       ffi.NativeFunction<
-          ffi.Int Function(ffi.Pointer<ffi.Char>, ffi.Int32, ffi.Int32,
+          ffi.Bool Function(ffi.Pointer<ffi.Char>, ffi.Int32, ffi.Int32,
               ffi.Pointer<ffi.Void>)>>('replaceSampler2DUniform');
   late final _replaceSampler2DUniform = _replaceSampler2DUniformPtr.asFunction<
-      int Function(ffi.Pointer<ffi.Char>, int, int, ffi.Pointer<ffi.Void>)>();
+      bool Function(ffi.Pointer<ffi.Char>, int, int, ffi.Pointer<ffi.Void>)>();
 
   // -- Set uniforms --
 
@@ -468,12 +468,13 @@ class FlutterOpenGLFfi {
     ffi.Pointer<ffi.Bool> valT = calloc(ffi.sizeOf<ffi.Bool>());
     valT.value = val;
 
-    int ret = _setUniform(
+    bool ret = _setUniform(
       name.toNativeUtf8().cast<ffi.Char>(),
       valT.cast<ffi.Void>(),
+      ffi.sizeOf<ffi.Bool>(),
     );
     calloc.free(valT);
-    return ret == 0 ? false : true;
+    return ret;
   }
 
   /// * set INT
@@ -481,12 +482,13 @@ class FlutterOpenGLFfi {
     ffi.Pointer<ffi.Int32> valT = calloc(ffi.sizeOf<ffi.Int32>());
     valT.value = val;
 
-    int ret = _setUniform(
+    bool ret = _setUniform(
       name.toNativeUtf8().cast<ffi.Char>(),
       valT.cast<ffi.Void>(),
+      ffi.sizeOf<ffi.Int32>(),
     );
     calloc.free(valT);
-    return ret == 0 ? false : true;
+    return ret;
   }
 
   /// * set FLOAT
@@ -494,12 +496,13 @@ class FlutterOpenGLFfi {
     ffi.Pointer<ffi.Float> valT = calloc(ffi.sizeOf<ffi.Float>());
     valT.value = val;
 
-    int ret = _setUniform(
+    bool ret = _setUniform(
       name.toNativeUtf8().cast<ffi.Char>(),
       valT.cast<ffi.Void>(),
+      ffi.sizeOf<ffi.Float>(),
     );
     calloc.free(valT);
-    return ret == 0 ? false : true;
+    return ret;
   }
 
   /// * set VEC2
@@ -508,12 +511,13 @@ class FlutterOpenGLFfi {
     valT[0] = val[0];
     valT[1] = val[1];
 
-    int ret = _setUniform(
+    bool ret = _setUniform(
       name.toNativeUtf8().cast<ffi.Char>(),
       valT.cast<ffi.Void>(),
+      2 * ffi.sizeOf<ffi.Float>(),
     );
     calloc.free(valT);
-    return ret == 0 ? false : true;
+    return ret;
   }
 
   /// * set VEC3
@@ -523,12 +527,13 @@ class FlutterOpenGLFfi {
     valT[1] = val[1];
     valT[2] = val[2];
 
-    int ret = _setUniform(
+    bool ret = _setUniform(
       name.toNativeUtf8().cast<ffi.Char>(),
       valT.cast<ffi.Void>(),
+      3 * ffi.sizeOf<ffi.Float>(),
     );
     calloc.free(valT);
-    return ret == 0 ? false : true;
+    return ret;
   }
 
   /// * set VEC4
@@ -539,12 +544,13 @@ class FlutterOpenGLFfi {
     valT[2] = val[2];
     valT[3] = val[3];
 
-    int ret = _setUniform(
+    bool ret = _setUniform(
       name.toNativeUtf8().cast<ffi.Char>(),
       valT.cast<ffi.Void>(),
+      4 * ffi.sizeOf<ffi.Float>(),
     );
     calloc.free(valT);
-    return ret == 0 ? false : true;
+    return ret;
   }
 
   /// * set MAT2
@@ -555,12 +561,13 @@ class FlutterOpenGLFfi {
     valT[2] = val[2];
     valT[3] = val[3];
 
-    int ret = _setUniform(
+    bool ret = _setUniform(
       name.toNativeUtf8().cast<ffi.Char>(),
       valT.cast<ffi.Void>(),
+      4 * ffi.sizeOf<ffi.Float>(),
     );
     calloc.free(valT);
-    return ret == 0 ? false : true;
+    return ret;
   }
 
   /// * set MAT3
@@ -576,12 +583,13 @@ class FlutterOpenGLFfi {
     valT[7] = val[7];
     valT[8] = val[8];
 
-    int ret = _setUniform(
+    bool ret = _setUniform(
       name.toNativeUtf8().cast<ffi.Char>(),
       valT.cast<ffi.Void>(),
+      9 * ffi.sizeOf<ffi.Float>(),
     );
     calloc.free(valT);
-    return ret == 0 ? false : true;
+    return ret;
   }
 
   /// * set MAT4
@@ -604,12 +612,13 @@ class FlutterOpenGLFfi {
     valT[14] = val[14];
     valT[15] = val[15];
 
-    int ret = _setUniform(
+    bool ret = _setUniform(
       name.toNativeUtf8().cast<ffi.Char>(),
       valT.cast<ffi.Void>(),
+      16 * ffi.sizeOf<ffi.Float>(),
     );
     calloc.free(valT);
-    return ret == 0 ? false : true;
+    return ret;
   }
 
   /// * set SAMPLER2D
@@ -623,20 +632,21 @@ class FlutterOpenGLFfi {
       valT[i] = val[i];
     }
 
-    int ret = _setUniform(
+    bool ret = _setUniform(
       name.toNativeUtf8().cast<ffi.Char>(),
       valT.cast<ffi.Void>(),
+      val.length,
     );
     calloc.free(valT);
-    return ret == 0 ? false : true;
+    return ret;
   }
 
   late final _setUniformPtr = _lookup<
       ffi.NativeFunction<
-          ffi.Int Function(
-              ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Void>)>>('setUniform');
+          ffi.Bool Function(
+              ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Void>, ffi.Size)>>('setUniformSized');
   late final _setUniform = _setUniformPtr
-      .asFunction<int Function(ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Void>)>();
+      .asFunction<bool Function(ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Void>, int)>();
 
   /// * Start capturing
   ///
@@ -647,32 +657,32 @@ class FlutterOpenGLFfi {
   /// 'cam1' for webCam1
   /// a complete local video file path
   bool startCaptureOnSampler2D(String name, String completeFilePath) {
-    int ret = _startCapture(
+    bool ret = _startCapture(
       name.toNativeUtf8().cast<ffi.Char>(),
       completeFilePath.toNativeUtf8().cast<ffi.Char>(),
     );
-    return ret == 0 ? false : true;
+    return ret;
   }
 
   late final _startCapturePtr = _lookup<
       ffi.NativeFunction<
-          ffi.Int Function(
+          ffi.Bool Function(
               ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>)>>('startCaptureOnSampler2D');
   late final _startCapture = _startCapturePtr
-      .asFunction<int Function(ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>)>();
+      .asFunction<bool Function(ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>)>();
 
   /// * Stop capturing
   ///
   bool stopCapture() {
-    int ret = _stopCapture();
-    return ret == 0 ? false : true;
+    bool ret = _stopCapture();
+    return ret;
   }
 
   late final _stopCapturePtr = _lookup<
       ffi.NativeFunction<
-          ffi.Int Function()>>('stopCapture');
+          ffi.Bool Function()>>('stopCapture');
   late final _stopCapture = _stopCapturePtr
-      .asFunction<int Function()>();
+      .asFunction<bool Function()>();
 
 
 }

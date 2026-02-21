@@ -1,6 +1,6 @@
 name: glow
 description: Flutter plugin providing GPU shader rendering via a Texture widget. Uses a Rust engine with glow for cross-platform GL (OpenGL, GL ES, WebGL2). ShaderToy compatible.
-version: 0.0.1
+version: 0.0.2
 repository: https://github.com/ManyMath/glow_dart
 
 environment:

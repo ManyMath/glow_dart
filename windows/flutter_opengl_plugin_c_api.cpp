@@ -1,4 +1,4 @@
-#include "include/flutter_opengl/flutter_opengl_plugin_c_api.h"
+#include "include/glow/flutter_opengl_plugin_c_api.h"
 
 #include <flutter/plugin_registrar_windows.h>
 

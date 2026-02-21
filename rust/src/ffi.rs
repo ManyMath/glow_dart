@@ -315,27 +315,39 @@ pub unsafe extern "C" fn removeUniform(name: *const c_char) -> bool {
     }
 }
 
-/// Update the value of an existing uniform. For Sampler2D the pointer is
-/// treated as raw RGBA pixel data of the same dimensions.
+/// Legacy unsized setter retained for ABI compatibility. It cannot safely
+/// infer the allocation length; callers must migrate to `setUniformSized`.
+/// Returns false without dereferencing either pointer.
 #[no_mangle]
-pub unsafe extern "C" fn setUniform(
+pub unsafe extern "C" fn setUniform(_name: *const c_char, _val: *mut c_void) -> bool {
+    false
+}
+
+/// Queue a uniform update with an explicit readable byte count.
+/// The render thread validates this length against the existing uniform type.
+/// A true result means queued, not that the uniform exists or was applied.
+///
+/// # Safety
+/// `name` must be a valid NUL-terminated string and `val` must reference
+/// `byte_len` readable bytes when a renderer is active. Data is copied before
+/// return. A null value, zero length or absent renderer is rejected.
+#[no_mangle]
+pub unsafe extern "C" fn setUniformSized(
     name: *const c_char,
-    val: *mut c_void,
+    val: *const c_void,
+    byte_len: usize,
 ) -> bool {
-    let name_str = CStr::from_ptr(name).to_string_lossy();
-
-    // Copy enough bytes for the largest possible uniform value (mat4 = 64 bytes).
-    // The render thread will interpret the bytes based on the uniform's stored type.
-    let data_vec = std::slice::from_raw_parts(val as *const u8, 64).to_vec();
-
-    let guard = RENDERER.lock().unwrap();
-    match guard.as_ref() {
-        Some(r) if r.has_shader() => {
-            r.set_uniform_value(&name_str, data_vec);
-            true
-        }
-        _ => false,
+    if name.is_null() || val.is_null() || byte_len == 0 || byte_len > isize::MAX as usize {
+        return false;
     }
+    let guard = RENDERER.lock().unwrap();
+    let Some(renderer) = guard.as_ref().filter(|renderer| renderer.has_shader()) else {
+        return false;
+    };
+    let name_str = CStr::from_ptr(name).to_string_lossy();
+    let data = std::slice::from_raw_parts(val as *const u8, byte_len).to_vec();
+    renderer.set_uniform_value(&name_str, data);
+    true
 }
 
 // ---------------------------------------------------------------------------
@@ -425,4 +437,27 @@ pub unsafe extern "C" fn nativeSurfaceSetClearColor(
     _a: i32,
 ) {
     // Reserved for future use.
+}
+
+#[cfg(test)]
+mod uniform_boundary_tests {
+    use super::*;
+
+    #[test]
+    fn unsized_setter_never_reads_unknown_allocations() {
+        assert!(!unsafe { setUniform(std::ptr::null(), std::ptr::null_mut()) });
+    }
+
+    #[test]
+    fn sized_setter_rejects_missing_renderer_and_invalid_buffers() {
+        let name = c"scalar";
+        let value = 7_i32;
+        assert!(!unsafe {
+            setUniformSized(name.as_ptr(), &value as *const i32 as *const c_void, 4)
+        });
+        assert!(!unsafe { setUniformSized(name.as_ptr(), std::ptr::null(), 4) });
+        assert!(!unsafe {
+            setUniformSized(name.as_ptr(), &value as *const i32 as *const c_void, 0)
+        });
+    }
 }

@@ -462,10 +462,7 @@ fn apply_uniform_ops(shader: &mut Shader, ops: &mut Vec<UniformOp>, loop_gl: &gl
                 );
             }
             UniformOp::SetValue { name, data } => {
-                shader.uniforms_mut().set_uniform_value(
-                    &name,
-                    data.as_ptr() as *const std::os::raw::c_void,
-                );
+                shader.uniforms_mut().set_uniform_value_bytes(&name, &data);
             }
             UniformOp::Remove { name } => {
                 // Skip GL texture deletion while the render loop is active.

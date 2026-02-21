@@ -1,0 +1,55 @@
+{
+  "dart_sdk": "3.13.2",
+  "packages": [
+    {
+      "name": "glow",
+      "path": ".",
+      "required": [
+        "LICENSE",
+        "rust/Cargo.toml",
+        "rust/src/lib.rs",
+        "linux/include/glow/flutter_opengl_plugin.h",
+        "windows/include/glow/flutter_opengl_plugin_c_api.h",
+        "ios/glow.podspec",
+        "macos/glow.podspec"
+      ],
+      "contracts": {
+        "linux/CMakeLists.txt": "set(PLUGIN_NAME \"glow_plugin\")",
+        "windows/CMakeLists.txt": "set(PLUGIN_NAME \"glow_plugin\")",
+        "ios/glow.podspec": "s.name             = 'glow'",
+        "macos/glow.podspec": "s.name             = 'glow'",
+        "lib/src/opengl_controller_native.dart": "DynamicLibrary.open(\"flutter_opengl_rust.dll\")"
+      }
+    }
+  ],
+  "flutter_package": "glow",
+  "library_name": "libflutter_opengl_rust.so",
+  "flutter_main": "import 'dart:io';\nimport 'package:flutter/material.dart';\nimport 'package:glow/glow.dart';\nvoid main() { WidgetsFlutterBinding.ensureInitialized(); final controller = OpenGLController(); controller.initializeGL(); if (controller.openglFFI.rendererStatus()) throw StateError('renderer unexpectedly active before surface creation'); if (controller.openglFFI.addIntUniform('payload', 1) || controller.openglFFI.setIntUniform('payload', 2) || controller.openglFFI.removeUniform('payload')) throw StateError('uniform operations succeeded without renderer'); final expected = File(Platform.environment['GLOW_PAYLOAD_LIBRARY']!).resolveSymbolicLinksSync(); final mappings = File('/proc/self/maps').readAsLinesSync().where((line) => line.contains('libflutter_opengl_rust.so')).toList(); if (mappings.isEmpty || mappings.any((line) => !line.endsWith(' $expected'))) throw StateError('unexpected native library: $mappings'); final size = controller.openglFFI.getTextureSize(); if (size != const Size(-1, -1)) throw StateError('unexpected initial texture size: $size'); print('Glow native FFI loaded; inactive renderer and uninitialized texture sentinel queried'); exit(0); }\n",
+  "flutter_runtime_command": [
+    "timeout",
+    "--signal=TERM",
+    "--kill-after=5s",
+    "60s",
+    "xvfb-run",
+    "-a",
+    "{executable}"
+  ],
+  "flutter_runtime_environment": {
+    "GDK_BACKEND": "x11",
+    "LIBGL_ALWAYS_SOFTWARE": "1"
+  },
+  "rust_toolchain": "1.94.0",
+  "rust_targets": {
+    "linux": [
+      "x86_64-unknown-linux-gnu"
+    ]
+  },
+  "relocate_flutter_bundle": true,
+  "library_environment": "GLOW_PAYLOAD_LIBRARY",
+  "analysis_command": [
+    "dart",
+    "analyze",
+    "lib/src/flutter_opengl_ffi.dart",
+    "lib/src/opengl_controller_native.dart"
+  ]
+}

@@ -1,3 +1,10 @@
+## 0.0.2
+
+- Repair Flutter package target names, generated header paths, desktop bundling and Apple podspec names.
+- Use a length-aware uniform setter and validate queued values; legacy unsized C setter now fails safely.
+- Match Dart FFI boolean and void declarations to the Rust C ABI.
+- Verify actual package archives with a fresh Linux Flutter build and runtime FFI smoke.
+
 ## 0.0.1
 
 Initial public release.

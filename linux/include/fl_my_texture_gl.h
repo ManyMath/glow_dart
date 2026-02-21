@@ -3,7 +3,7 @@
 
 #include <gtk/gtk.h>
 #include <glib-object.h>
-#include "flutter_opengl/flutter_opengl_plugin.h"
+#include "glow/flutter_opengl_plugin.h"
 #include <flutter_linux/flutter_linux.h>
 #include <vector>
 

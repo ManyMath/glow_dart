@@ -5,7 +5,7 @@
 cmake_minimum_required(VERSION 3.14)
 
 # Project-level configuration.
-set(PROJECT_NAME "flutter_opengl")
+set(PROJECT_NAME "glow")
 project(${PROJECT_NAME} LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -33,17 +33,17 @@ else()
   set(CARGO_BUILD_FLAGS "")
 endif()
 
-set(RUST_LIB_DIR "${RUST_DIR}/target/${RUST_PROFILE}")
+set(RUST_TARGET_DIR "${CMAKE_CURRENT_BINARY_DIR}/rust-target")
+set(RUST_LIB_DIR "${RUST_TARGET_DIR}/${RUST_PROFILE}")
 set(RUST_DLL_PATH "${RUST_LIB_DIR}/${RUST_LIB_NAME}.dll")
 set(RUST_IMPLIB_PATH "${RUST_LIB_DIR}/${RUST_LIB_NAME}.dll.lib")
 
-add_custom_command(
-  OUTPUT ${RUST_DLL_PATH}
-  COMMAND cargo build ${CARGO_BUILD_FLAGS}
+add_custom_target(glow_rust_lib ALL
+  BYPRODUCTS "${RUST_DLL_PATH}" "${RUST_IMPLIB_PATH}"
+  COMMAND cargo build --locked --target-dir "${RUST_TARGET_DIR}" ${CARGO_BUILD_FLAGS}
   WORKING_DIRECTORY ${RUST_DIR}
   COMMENT "Building Rust library (${RUST_PROFILE})"
 )
-add_custom_target(rust_lib ALL DEPENDS ${RUST_DLL_PATH})
 
 # Import the Rust shared library as a CMake target
 add_library(${RUST_LIB_NAME} SHARED IMPORTED)
@@ -51,7 +51,7 @@ set_target_properties(${RUST_LIB_NAME} PROPERTIES
   IMPORTED_LOCATION ${RUST_DLL_PATH}
   IMPORTED_IMPLIB ${RUST_IMPLIB_PATH}
 )
-add_dependencies(${RUST_LIB_NAME} rust_lib)
+add_dependencies(${RUST_LIB_NAME} glow_rust_lib)
 
 # -----------------------------------------------------------------------
 # Plugin sources (no more C++ engine sources)
@@ -59,7 +59,7 @@ add_dependencies(${RUST_LIB_NAME} rust_lib)
 
 # This value is used when generating builds using this plugin, so it must
 # not be changed
-set(PLUGIN_NAME "flutter_opengl_plugin")
+set(PLUGIN_NAME "glow_plugin")
 
 # Any new source files that you add to the plugin should be added here.
 list(APPEND PLUGIN_SOURCES
@@ -71,7 +71,7 @@ list(APPEND PLUGIN_SOURCES
 # Define the plugin library target. Its name must not be changed (see comment
 # on PLUGIN_NAME above).
 add_library(${PLUGIN_NAME} SHARED
-  "include/flutter_opengl/flutter_opengl_plugin_c_api.h"
+  "include/glow/flutter_opengl_plugin_c_api.h"
   "flutter_opengl_plugin_c_api.cpp"
   ${PLUGIN_SOURCES}
 )
@@ -108,7 +108,7 @@ target_link_libraries(${PLUGIN_NAME} PRIVATE
 
 # Bundle the Rust .dll with the Flutter application so it ends up next to
 # the executable at runtime.
-set(flutter_opengl_bundled_libraries
+set(glow_bundled_libraries
   "${RUST_DLL_PATH}"
   PARENT_SCOPE
 )
