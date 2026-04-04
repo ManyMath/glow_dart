@@ -49,16 +49,19 @@ if [ -z "$RUST_TARGETS" ]; then
     exit 1
 fi
 
-# Ensure Rust targets are installed and build each one
+# Require provisioned Rust targets; build scripts never install shared SDKs
 BUILT_LIBS=""
 for TARGET in $RUST_TARGETS; do
-    rustup target add "$TARGET" 2>/dev/null || true
-    cargo build $CARGO_FLAGS --target "$TARGET" --manifest-path "$RUST_DIR/Cargo.toml"
+    if ! rustup target list --installed | grep -Fxq "$TARGET"; then
+        echo "error: provision Rust target $TARGET before building Glow" >&2
+        exit 1
+    fi
+    cargo build --locked $CARGO_FLAGS --target "$TARGET" --manifest-path "$RUST_DIR/Cargo.toml"
     BUILT_LIBS="$BUILT_LIBS $RUST_DIR/target/$TARGET/$CARGO_PROFILE/$LIB_NAME"
 done
 
 # Create a universal (fat) library if multiple architectures, otherwise just copy
-OUTPUT_DIR="$RUST_DIR/target/ios-universal/$CARGO_PROFILE"
+OUTPUT_DIR="$RUST_DIR/target/ios-universal/$CONFIGURATION"
 mkdir -p "$OUTPUT_DIR"
 
 LIB_COUNT=$(echo $BUILT_LIBS | wc -w | tr -d ' ')

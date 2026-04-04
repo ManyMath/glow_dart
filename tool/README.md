@@ -46,3 +46,9 @@ applicable; ordinary hosted dependencies resolve without overrides.
 
 All CI and artifacts remain private. No GitHub writes or public package
 publication are performed by this gate.
+
+Cross-platform configuration preflights only the host Rust target for Flutter
+debug macOS/Windows consumers. Apple scripts require installed targets and
+write the static archive into the configuration directory expected by the
+podspec (Debug/Release). Universal release builds require separate two-target
+provisioning and validation. Linux is still the only runtime smoke here.
