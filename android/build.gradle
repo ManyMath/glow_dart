@@ -1,3 +1,6 @@
+import javax.inject.Inject
+import org.gradle.process.ExecOperations
+
 group 'com.example.flutter_opengl'
 version '0.0.1'
 
@@ -75,7 +78,13 @@ def abiTargets = [
     'x86_64'      : 'x86_64-linux-android',
 ]
 
-task cargoNdkBuild {
+// Use injected services: Project.exec was removed in Gradle 9.
+abstract class GlowCargoNdkTask extends DefaultTask {
+    @Inject
+    abstract ExecOperations getExecOperations()
+}
+
+task cargoNdkBuild(type: GlowCargoNdkTask) {
     description = 'Build the Rust shared library for all Android ABIs using cargo-ndk'
 
     // Input: all Rust source files
@@ -95,7 +104,7 @@ task cargoNdkBuild {
         }
 
         abiTargets.each { abi, target ->
-            exec {
+            execOperations.exec {
                 workingDir rustDir
                 environment 'ANDROID_NDK_HOME', ndkDir.absolutePath
                 commandLine 'cargo', 'ndk',

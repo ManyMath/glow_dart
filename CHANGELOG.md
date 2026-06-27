@@ -1,5 +1,7 @@
 ## 0.0.2
 
+- Use injected process execution for Android Rust builds with Gradle 9.
+
 - Repair Flutter package target names, generated header paths, desktop bundling and Apple podspec names.
 - Use a length-aware uniform setter and validate queued values; legacy unsized C setter now fails safely.
 - Match Dart FFI boolean and void declarations to the Rust C ABI.
