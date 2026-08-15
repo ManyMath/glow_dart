@@ -18,15 +18,26 @@ import tempfile
 import tomllib
 
 
-def run(args, cwd, log, env=None):
+def run(args, cwd, log, env=None, timeout=None):
+    env = dict(os.environ if env is None else env)
     # CreateProcess does not apply PATHEXT like a Windows shell. Resolve the
     # SDK's dart.bat/flutter.bat without relying on shell executable search.
-    executable = shutil.which(args[0], path=(env or os.environ).get("PATH"))
+    executable = shutil.which(args[0], path=env.get("PATH"))
     if executable is None:
         raise RuntimeError(f"Required executable not found: {args[0]}")
-    result = subprocess.run([executable, *args[1:]], cwd=cwd, env=env,
-                            encoding="utf-8", errors="replace", input="\n",
-                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    # A Flutter app keeps running after an uncaught error; the timeout makes
+    # that a failure instead of a hang.
+    try:
+        result = subprocess.run([executable, *args[1:]], cwd=cwd, env=env,
+                                encoding="utf-8", errors="replace", input="\n",
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                timeout=timeout)
+    except subprocess.TimeoutExpired as error:
+        partial = error.stdout or ""
+        if isinstance(partial, bytes):
+            partial = partial.decode("utf-8", errors="replace")
+        Path(log).write_text(partial, encoding="utf-8")
+        raise RuntimeError(f"Command timed out after {timeout}s; see {log}") from error
     Path(log).write_text(result.stdout, encoding="utf-8")
     if result.returncode:
         raise RuntimeError(f"Command failed ({result.returncode}): {args}; see {log}")
@@ -146,6 +157,31 @@ def required_rust_targets(config, target, machine=None):
     return [value.replace("{host_arch}", arch or "") for value in configured]
 
 
+def prefer_real_toolchain(channel, cwd, log):
+    """Put the pinned toolchain's real binaries first for this gate's children.
+
+    Windows rustup proxies may be user-created symlinks, which processes that
+    enforce redirection trust refuse to start (os error 448). The Windows
+    plugin build runs a bare `cargo`, so the proxy must not be first on PATH.
+    """
+    cargo = Path(run(["rustup", "which", "cargo", "--toolchain", channel], cwd, log).strip())
+    os.environ["PATH"] = str(cargo.parent) + os.pathsep + os.environ.get("PATH", "")
+    os.environ.setdefault("RUSTUP_WINDOWS_PATH_ADD_BIN", "1")
+
+
+def runtime_library(config, target):
+    """Bundled native library smoke for a Flutter build target, or None.
+
+    `bundle_dir` is the library's directory suffix under build/<target> and
+    `bundle_root` the app bundle relative to it. An entry may override
+    `flutter_main`, the runtime command/environment, the executable name and
+    add a `runtime_timeout`. Older configs name only the Linux library.
+    """
+    libraries = config.get("runtime_libraries") or {
+        "linux": {"name": config["library_name"], "bundle_dir": "bundle/lib"}}
+    return libraries.get(target)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, required=True)
@@ -172,6 +208,8 @@ def main():
         if not required or not set(required).issubset(targets):
             raise RuntimeError(f"Provision Rust targets for {args.target} before verification; no installer fallback")
         run(["rustup", "run", channel, "rustc", "--version", "--verbose"], repo, output / "native-rust-version.log")
+        if os.name == "nt":
+            prefer_real_toolchain(channel, repo, output / "rust-which-cargo.log")
     report = {"mode": args.mode, "target": args.target, "dart": version.strip(),
               "source_revision": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo).decode().strip(),
               "source_dirty": bool(subprocess.check_output(["git", "status", "--porcelain"], cwd=repo)),
@@ -218,29 +256,39 @@ def main():
                 text += f"  {item['name']}:\n    path: ../packages/{item['name']}\n"
 
     manifest.write_text(text)
-    (consumer / "lib/main.dart").write_text(config["flutter_main"])
+    library = runtime_library(config, args.target)
+    (consumer / "lib/main.dart").write_text((library or {}).get("flutter_main", config["flutter_main"]))
     run(["flutter", "pub", "get"], consumer, output / "flutter-get.log")
     run(["flutter", "build", args.target, "--debug"] + (["--no-codesign"] if args.target == "ios" else []), consumer, output / "flutter-build.log")
     report["flutter_build"] = "passed"
     # Per-repository smoke program explicitly loads the native library and
     # tests minimal behavior without requiring a physical capture device.
-    if args.target == "linux":
-        matches = list((consumer / "build/linux").rglob(config["library_name"]))
-        bundled = [p for p in matches if "/bundle/lib/" in str(p)]
+    if library is not None:
+        # Compare path parts, not strings: Windows paths use backslashes.
+        bundle_dir = tuple(library["bundle_dir"].split("/"))
+        matches = list((consumer / "build" / args.target).rglob(library["name"]))
+        bundled = [p for p in matches if p.parent.parts[-len(bundle_dir):] == bundle_dir]
         if len(bundled) != 1:
             raise RuntimeError(f"Expected exactly one bundled native library, found {bundled}")
-        if config.get("flutter_runtime_command"):
-            bundle = bundled[0].parent.parent
+        # The loader can fall back to a same-named library on PATH.
+        if os.name == "nt" and shutil.which(library["name"], path=os.environ.get("PATH")):
+            raise RuntimeError(f"{library['name']} is on PATH; the smoke could load it instead of the bundle")
+        report["native_library"] = {"path": bundled[0].relative_to(consumer).as_posix(),
+                                    "sha256": hashlib.sha256(bundled[0].read_bytes()).hexdigest()}
+        runtime_command = library.get("flutter_runtime_command", config.get("flutter_runtime_command"))
+        if runtime_command:
+            bundle = (bundled[0].parent / library.get("bundle_root", "..")).resolve()
+            in_bundle = bundled[0].relative_to(bundle)
             if config.get("relocate_flutter_bundle", False):
                 relocated = output / "runtime-bundle"
                 shutil.copytree(bundle, relocated)
                 bundle = relocated
-            executable = bundle / "payload_consumer"
-            command = [part.replace("{executable}", str(executable)) for part in config["flutter_runtime_command"]]
-            runtime_env = dict(os.environ, **config.get("flutter_runtime_environment", {}))
+            executable = bundle / library.get("executable", "payload_consumer")
+            command = [part.replace("{executable}", str(executable)) for part in runtime_command]
+            runtime_env = dict(os.environ, **library.get("flutter_runtime_environment", config.get("flutter_runtime_environment", {})))
             if config.get("library_environment"):
-                runtime_env[config["library_environment"]] = str(bundle / "lib" / config["library_name"])
-            run(command, executable.parent, output / "flutter-smoke.log", runtime_env)
+                runtime_env[config["library_environment"]] = str(bundle / in_bundle)
+            run(command, executable.parent, output / "flutter-smoke.log", runtime_env, library.get("runtime_timeout"))
             report["flutter_native_smoke"] = "passed (configured Flutter native behavior)"
         else:
             cli = output / "dart-consumer"
@@ -256,7 +304,7 @@ def main():
             run(["dart", "pub", "get"], cli, output / "dart-get.log")
             env = dict(os.environ, **{config["library_environment"]: str(bundled[0])})
             if config.get("copy_library_to_cli", False):
-                copied = cli / config["library_name"]
+                copied = cli / library["name"]
                 shutil.copy2(bundled[0], copied)
                 env[config["library_environment"]] = str(copied)
             for source, destination in config.get("smoke_files", {}).items():

@@ -52,3 +52,15 @@ debug macOS/Windows consumers. Apple scripts require installed targets and
 write the static archive into the configuration directory expected by the
 podspec (Debug/Release). Universal release builds require separate two-target
 provisioning and validation. Linux is still the only runtime smoke here.
+
+The Windows gate runs the bounded inactive-renderer smoke from a relocated
+bundle and verifies the exact loaded Rust DLL with GetModuleFileNameW. It uses
+the installed pinned Rust toolchain's real cargo executable for child builds.
+This validates native loading and the listed ABI calls; the Windows test host
+did not provide a working GPU surface, so shader/rendering acceptance remains
+separate. The legacy library_name key remains for existing tooling.
+
+Rust queue regression tests cover unaligned additions, invalid sampler/raw
+inputs, overflow dimensions and short/mismatched byte buffers. WASM setters
+now use the checked byte interface; a WASM compile check is separate from
+browser/GPU runtime validation.

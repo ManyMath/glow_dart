@@ -4,7 +4,7 @@ use glow::HasContext;
 
 use crate::sampler::Sampler2D;
 use crate::shader::Shader;
-use crate::uniform::UniformType;
+use crate::uniform::{UniformType, float_slice_bytes};
 
 const QUAD_VERTICES: [f32; 18] = [
     -1.0, -1.0, 0.0,
@@ -273,9 +273,9 @@ impl WasmRenderer {
     pub fn set_mouse_position(&mut self, x: f32, y: f32, z: f32, w: f32) {
         self.mouse = [x, y, z, w];
         if let Some(ref mut s) = self.shader {
-            s.uniforms_mut().set_uniform_value(
+            s.uniforms_mut().set_uniform_value_bytes(
                 "iMouse",
-                self.mouse.as_ptr() as *const std::os::raw::c_void,
+                float_slice_bytes(&self.mouse),
             );
         }
     }
@@ -285,10 +285,10 @@ impl WasmRenderer {
     #[wasm_bindgen]
     pub fn add_bool_uniform(&mut self, name: &str, val: bool) -> bool {
         match self.shader.as_mut() {
-            Some(s) => s.uniforms_mut().add_uniform(
+            Some(s) => s.uniforms_mut().add_uniform_bytes(
                 name,
                 UniformType::Bool,
-                &val as *const bool as *const std::os::raw::c_void,
+                &[u8::from(val)],
             ),
             None => false,
         }
@@ -297,10 +297,10 @@ impl WasmRenderer {
     #[wasm_bindgen]
     pub fn add_int_uniform(&mut self, name: &str, val: i32) -> bool {
         match self.shader.as_mut() {
-            Some(s) => s.uniforms_mut().add_uniform(
+            Some(s) => s.uniforms_mut().add_uniform_bytes(
                 name,
                 UniformType::Int,
-                &val as *const i32 as *const std::os::raw::c_void,
+                &val.to_ne_bytes(),
             ),
             None => false,
         }
@@ -309,10 +309,10 @@ impl WasmRenderer {
     #[wasm_bindgen]
     pub fn add_float_uniform(&mut self, name: &str, val: f32) -> bool {
         match self.shader.as_mut() {
-            Some(s) => s.uniforms_mut().add_uniform(
+            Some(s) => s.uniforms_mut().add_uniform_bytes(
                 name,
                 UniformType::Float,
-                &val as *const f32 as *const std::os::raw::c_void,
+                &val.to_ne_bytes(),
             ),
             None => false,
         }
@@ -322,10 +322,10 @@ impl WasmRenderer {
     pub fn add_vec2_uniform(&mut self, name: &str, x: f32, y: f32) -> bool {
         let v = [x, y];
         match self.shader.as_mut() {
-            Some(s) => s.uniforms_mut().add_uniform(
+            Some(s) => s.uniforms_mut().add_uniform_bytes(
                 name,
                 UniformType::Vec2,
-                v.as_ptr() as *const std::os::raw::c_void,
+                float_slice_bytes(&v),
             ),
             None => false,
         }
@@ -335,10 +335,10 @@ impl WasmRenderer {
     pub fn add_vec3_uniform(&mut self, name: &str, x: f32, y: f32, z: f32) -> bool {
         let v = [x, y, z];
         match self.shader.as_mut() {
-            Some(s) => s.uniforms_mut().add_uniform(
+            Some(s) => s.uniforms_mut().add_uniform_bytes(
                 name,
                 UniformType::Vec3,
-                v.as_ptr() as *const std::os::raw::c_void,
+                float_slice_bytes(&v),
             ),
             None => false,
         }
@@ -348,10 +348,10 @@ impl WasmRenderer {
     pub fn add_vec4_uniform(&mut self, name: &str, x: f32, y: f32, z: f32, w: f32) -> bool {
         let v = [x, y, z, w];
         match self.shader.as_mut() {
-            Some(s) => s.uniforms_mut().add_uniform(
+            Some(s) => s.uniforms_mut().add_uniform_bytes(
                 name,
                 UniformType::Vec4,
-                v.as_ptr() as *const std::os::raw::c_void,
+                float_slice_bytes(&v),
             ),
             None => false,
         }
@@ -361,10 +361,10 @@ impl WasmRenderer {
     pub fn add_mat2_uniform(&mut self, name: &str, v0: f32, v1: f32, v2: f32, v3: f32) -> bool {
         let v = [v0, v1, v2, v3];
         match self.shader.as_mut() {
-            Some(s) => s.uniforms_mut().add_uniform(
+            Some(s) => s.uniforms_mut().add_uniform_bytes(
                 name,
                 UniformType::Mat2,
-                v.as_ptr() as *const std::os::raw::c_void,
+                float_slice_bytes(&v),
             ),
             None => false,
         }
@@ -380,10 +380,10 @@ impl WasmRenderer {
     ) -> bool {
         let v = [v0, v1, v2, v3, v4, v5, v6, v7, v8];
         match self.shader.as_mut() {
-            Some(s) => s.uniforms_mut().add_uniform(
+            Some(s) => s.uniforms_mut().add_uniform_bytes(
                 name,
                 UniformType::Mat3,
-                v.as_ptr() as *const std::os::raw::c_void,
+                float_slice_bytes(&v),
             ),
             None => false,
         }
@@ -400,10 +400,10 @@ impl WasmRenderer {
     ) -> bool {
         let v = [v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15];
         match self.shader.as_mut() {
-            Some(s) => s.uniforms_mut().add_uniform(
+            Some(s) => s.uniforms_mut().add_uniform_bytes(
                 name,
                 UniformType::Mat4,
-                v.as_ptr() as *const std::os::raw::c_void,
+                float_slice_bytes(&v),
             ),
             None => false,
         }
@@ -413,12 +413,10 @@ impl WasmRenderer {
 
     #[wasm_bindgen]
     pub fn set_bool_uniform(&mut self, name: &str, val: bool) -> bool {
-        // UniformQueue::set_uniform_value reads a f32 for non-Sampler types.
-        let fval: f32 = if val { 1.0 } else { 0.0 };
         match self.shader.as_mut() {
-            Some(s) => s.uniforms_mut().set_uniform_value(
+            Some(s) => s.uniforms_mut().set_uniform_value_bytes(
                 name,
-                &fval as *const f32 as *const std::os::raw::c_void,
+                &[u8::from(val)],
             ),
             None => false,
         }
@@ -426,11 +424,10 @@ impl WasmRenderer {
 
     #[wasm_bindgen]
     pub fn set_int_uniform(&mut self, name: &str, val: i32) -> bool {
-        let fval = val as f32;
         match self.shader.as_mut() {
-            Some(s) => s.uniforms_mut().set_uniform_value(
+            Some(s) => s.uniforms_mut().set_uniform_value_bytes(
                 name,
-                &fval as *const f32 as *const std::os::raw::c_void,
+                &val.to_ne_bytes(),
             ),
             None => false,
         }
@@ -439,9 +436,9 @@ impl WasmRenderer {
     #[wasm_bindgen]
     pub fn set_float_uniform(&mut self, name: &str, val: f32) -> bool {
         match self.shader.as_mut() {
-            Some(s) => s.uniforms_mut().set_uniform_value(
+            Some(s) => s.uniforms_mut().set_uniform_value_bytes(
                 name,
-                &val as *const f32 as *const std::os::raw::c_void,
+                &val.to_ne_bytes(),
             ),
             None => false,
         }
@@ -451,9 +448,9 @@ impl WasmRenderer {
     pub fn set_vec2_uniform(&mut self, name: &str, x: f32, y: f32) -> bool {
         let v = [x, y];
         match self.shader.as_mut() {
-            Some(s) => s.uniforms_mut().set_uniform_value(
+            Some(s) => s.uniforms_mut().set_uniform_value_bytes(
                 name,
-                v.as_ptr() as *const std::os::raw::c_void,
+                float_slice_bytes(&v),
             ),
             None => false,
         }
@@ -463,9 +460,9 @@ impl WasmRenderer {
     pub fn set_vec3_uniform(&mut self, name: &str, x: f32, y: f32, z: f32) -> bool {
         let v = [x, y, z];
         match self.shader.as_mut() {
-            Some(s) => s.uniforms_mut().set_uniform_value(
+            Some(s) => s.uniforms_mut().set_uniform_value_bytes(
                 name,
-                v.as_ptr() as *const std::os::raw::c_void,
+                float_slice_bytes(&v),
             ),
             None => false,
         }
@@ -475,9 +472,9 @@ impl WasmRenderer {
     pub fn set_vec4_uniform(&mut self, name: &str, x: f32, y: f32, z: f32, w: f32) -> bool {
         let v = [x, y, z, w];
         match self.shader.as_mut() {
-            Some(s) => s.uniforms_mut().set_uniform_value(
+            Some(s) => s.uniforms_mut().set_uniform_value_bytes(
                 name,
-                v.as_ptr() as *const std::os::raw::c_void,
+                float_slice_bytes(&v),
             ),
             None => false,
         }
@@ -487,9 +484,9 @@ impl WasmRenderer {
     pub fn set_mat2_uniform(&mut self, name: &str, v0: f32, v1: f32, v2: f32, v3: f32) -> bool {
         let v = [v0, v1, v2, v3];
         match self.shader.as_mut() {
-            Some(s) => s.uniforms_mut().set_uniform_value(
+            Some(s) => s.uniforms_mut().set_uniform_value_bytes(
                 name,
-                v.as_ptr() as *const std::os::raw::c_void,
+                float_slice_bytes(&v),
             ),
             None => false,
         }
@@ -505,9 +502,9 @@ impl WasmRenderer {
     ) -> bool {
         let v = [v0, v1, v2, v3, v4, v5, v6, v7, v8];
         match self.shader.as_mut() {
-            Some(s) => s.uniforms_mut().set_uniform_value(
+            Some(s) => s.uniforms_mut().set_uniform_value_bytes(
                 name,
-                v.as_ptr() as *const std::os::raw::c_void,
+                float_slice_bytes(&v),
             ),
             None => false,
         }
@@ -524,9 +521,9 @@ impl WasmRenderer {
     ) -> bool {
         let v = [v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15];
         match self.shader.as_mut() {
-            Some(s) => s.uniforms_mut().set_uniform_value(
+            Some(s) => s.uniforms_mut().set_uniform_value_bytes(
                 name,
-                v.as_ptr() as *const std::os::raw::c_void,
+                float_slice_bytes(&v),
             ),
             None => false,
         }
@@ -615,15 +612,15 @@ impl WasmRenderer {
         }
 
         // Update iTime if present.
-        s.uniforms_mut().set_uniform_value(
+        s.uniforms_mut().set_uniform_value_bytes(
             "iTime",
-            &elapsed_secs as *const f32 as *const std::os::raw::c_void,
+            &elapsed_secs.to_ne_bytes(),
         );
 
         // Update iMouse if present.
-        s.uniforms_mut().set_uniform_value(
+        s.uniforms_mut().set_uniform_value_bytes(
             "iMouse",
-            self.mouse.as_ptr() as *const std::os::raw::c_void,
+            float_slice_bytes(&self.mouse),
         );
 
         s.uniforms().send_all_uniforms(s.gl());

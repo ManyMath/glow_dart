@@ -264,18 +264,24 @@ pub unsafe extern "C" fn getFPS() -> f64 {
 // ---------------------------------------------------------------------------
 
 /// Add a uniform of the given type. `val` points to the value data whose
-/// layout must match the type (bool, i32, f32, [f32;N], or Sampler2D).
+/// layout must match the type (bool, i32, f32 or [f32;N]); it need not be
+/// aligned. Sampler2D is rejected: use `addSampler2DUniform`, since a byte
+/// copy of a caller's struct is not a valid Rust `Sampler2D`. Null pointers
+/// are rejected.
 #[no_mangle]
 pub unsafe extern "C" fn addUniform(
     name: *const c_char,
     uniform_type: i32,
     val: *mut c_void,
 ) -> bool {
-    let name_str = CStr::from_ptr(name).to_string_lossy();
+    if name.is_null() || val.is_null() {
+        return false;
+    }
     let ut = match UniformType::from_i32(uniform_type) {
+        Some(UniformType::Sampler2D) | None => return false,
         Some(t) => t,
-        None => return false,
     };
+    let name_str = CStr::from_ptr(name).to_string_lossy();
 
     let data_size = match ut {
         UniformType::Bool => std::mem::size_of::<bool>(),
@@ -354,7 +360,18 @@ pub unsafe extern "C" fn setUniformSized(
 // Sampler2D uniforms
 // ---------------------------------------------------------------------------
 
-/// Add a new Sampler2D uniform with RGBA32 image data.
+/// Byte length of a positive RGBA32 image, or None when a dimension is not
+/// positive or the length does not fit a slice.
+fn rgba32_len(width: i32, height: i32) -> Option<usize> {
+    if width <= 0 || height <= 0 {
+        return None;
+    }
+    let len = (width as usize).checked_mul(height as usize)?.checked_mul(4)?;
+    (len <= isize::MAX as usize).then_some(len)
+}
+
+/// Add a new Sampler2D uniform with RGBA32 image data. Null pointers and
+/// non-positive or overflowing dimensions are rejected.
 #[no_mangle]
 pub unsafe extern "C" fn addSampler2DUniform(
     name: *const c_char,
@@ -362,8 +379,13 @@ pub unsafe extern "C" fn addSampler2DUniform(
     height: i32,
     val: *mut c_void,
 ) -> bool {
+    let Some(byte_count) = rgba32_len(width, height) else {
+        return false;
+    };
+    if name.is_null() || val.is_null() {
+        return false;
+    }
     let name_str = CStr::from_ptr(name).to_string_lossy();
-    let byte_count = (width * height * 4) as usize;
     let data = std::slice::from_raw_parts(val as *const u8, byte_count);
 
     let guard = RENDERER.lock().unwrap();
@@ -391,8 +413,13 @@ pub unsafe extern "C" fn replaceSampler2DUniform(
     height: i32,
     val: *mut c_void,
 ) -> bool {
+    let Some(byte_count) = rgba32_len(width, height) else {
+        return false;
+    };
+    if name.is_null() || val.is_null() {
+        return false;
+    }
     let name_str = CStr::from_ptr(name).to_string_lossy();
-    let byte_count = (width * height * 4) as usize;
     let data = std::slice::from_raw_parts(val as *const u8, byte_count);
 
     let guard = RENDERER.lock().unwrap();
@@ -459,5 +486,31 @@ mod uniform_boundary_tests {
         assert!(!unsafe {
             setUniformSized(name.as_ptr(), &value as *const i32 as *const c_void, 0)
         });
+    }
+
+    #[test]
+    fn add_rejects_null_and_sampler_bytes_before_reading() {
+        let name = c"value";
+        let mut value = 7_i32;
+        let val = &mut value as *mut i32 as *mut c_void;
+        assert!(!unsafe { addUniform(std::ptr::null(), 1, val) });
+        assert!(!unsafe { addUniform(name.as_ptr(), 1, std::ptr::null_mut()) });
+        assert!(!unsafe { addUniform(name.as_ptr(), UniformType::Sampler2D as i32, val) });
+        assert!(!unsafe { addUniform(name.as_ptr(), 99, val) });
+    }
+
+    #[test]
+    fn sampler_sizes_are_checked_before_reading() {
+        assert_eq!(rgba32_len(2, 3), Some(24));
+        assert_eq!(rgba32_len(0, 3), None);
+        assert_eq!(rgba32_len(-1, 3), None);
+        // Fits usize on 64-bit hosts but exceeds a slice's isize::MAX bound.
+        assert_eq!(rgba32_len(i32::MAX, i32::MAX), None);
+        let name = c"tex";
+        let mut pixel = [0_u8; 4];
+        let val = pixel.as_mut_ptr() as *mut c_void;
+        assert!(!unsafe { addSampler2DUniform(name.as_ptr(), -1, 1, val) });
+        assert!(!unsafe { addSampler2DUniform(name.as_ptr(), 1, 1, std::ptr::null_mut()) });
+        assert!(!unsafe { replaceSampler2DUniform(std::ptr::null(), 1, 1, val) });
     }
 }

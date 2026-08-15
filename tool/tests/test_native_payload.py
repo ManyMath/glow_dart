@@ -65,11 +65,61 @@ class PayloadTests(unittest.TestCase):
                 gate.verify_candidate_constraints(root, [{"name": "payload_core"}, {"name": "payload_shim"}])
             self.assertIn("does not satisfy declared constraint", (root / "candidate-constraints.log").read_text())
 
+    def test_explicit_empty_child_environment_is_preserved(self):
+        import subprocess
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(gate.shutil, "which", return_value="/tools/dart"), patch.object(gate.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, "ok")) as invoke:
+                gate.run(["dart", "--version"], tmp, Path(tmp) / "log", env={})
+                self.assertEqual(invoke.call_args.kwargs["env"], {})
+
+    def test_timed_out_runtime_retains_partial_diagnostics(self):
+        import subprocess
+        with tempfile.TemporaryDirectory() as tmp:
+            log = Path(tmp) / "runtime.log"
+            with patch.object(gate.shutil, "which", return_value="/tools/app"), patch.object(gate.subprocess, "run", side_effect=subprocess.TimeoutExpired(["app"], 1, output=b"native started\n")):
+                with self.assertRaisesRegex(RuntimeError, "timed out"):
+                    gate.run(["app"], tmp, log, timeout=1)
+            self.assertEqual(log.read_text(), "native started\n")
+
+    def test_real_toolchain_binaries_lead_child_path(self):
+        import os
+        with tempfile.TemporaryDirectory() as tmp:
+            cargo = str(Path(tmp) / "toolchains" / "pin" / "bin" / "cargo.exe")
+            with patch.dict(os.environ, {"PATH": "C:/proxies"}, clear=False), patch.object(gate, "run", return_value=cargo + "\n") as which:
+                os.environ.pop("RUSTUP_WINDOWS_PATH_ADD_BIN", None)
+                gate.prefer_real_toolchain("1.94.0", tmp, Path(tmp) / "which.log")
+                self.assertEqual(os.environ["PATH"].split(os.pathsep)[0], str(Path(cargo).parent))
+                self.assertEqual(os.environ["RUSTUP_WINDOWS_PATH_ADD_BIN"], "1")
+            self.assertEqual(which.call_args.args[0], ["rustup", "which", "cargo", "--toolchain", "1.94.0"])
+
+    def test_runtime_library_keeps_legacy_linux_config(self):
+        self.assertEqual(gate.runtime_library({"library_name": "libdemo.so"}, "linux"),
+                         {"name": "libdemo.so", "bundle_dir": "bundle/lib"})
+        self.assertIsNone(gate.runtime_library({"library_name": "libdemo.so"}, "windows"))
+
+    def test_windows_runtime_runs_its_own_bounded_app_smoke(self):
+        import json
+        config = json.loads((Path(__file__).parents[1] / "payload.json").read_text())
+        windows = gate.runtime_library(config, "windows")
+        self.assertEqual((windows["name"], windows["bundle_dir"], windows["bundle_root"]),
+                         ("flutter_opengl_rust.dll", "runner/Debug", "."))
+        self.assertEqual(windows["flutter_runtime_command"], ["{executable}"])
+        self.assertGreater(windows["runtime_timeout"], 0)
+        self.assertNotIn("/proc/self/maps", windows["flutter_main"])
+        self.assertIn("GetModuleFileNameW", windows["flutter_main"])
+        self.assertNotIn("xvfb", " ".join(windows["flutter_runtime_command"]))
+
     def test_pubignore_can_include_gitignored_generated_source(self):
+        import json
         import subprocess
         import tarfile
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
+            # --to-archive is hidden: only exercise it on the SDK the gate pins.
+            pin = json.loads((Path(__file__).parents[1] / "payload.json").read_text())["dart_sdk"]
+            version = gate.run(["dart", "--version"], tmp, root / "version.log")
+            if f"Dart SDK version: {pin} " not in version:
+                self.skipTest(f"requires pinned Dart {pin}: {version.strip()}")
             repo = root / "repo"
             repo.mkdir()
             subprocess.run(["git", "init", "-q", str(repo)], check=True)

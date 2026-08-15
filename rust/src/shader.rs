@@ -154,11 +154,14 @@ impl Shader {
         name: &str,
         sampler: Sampler2D,
     ) -> bool {
-        let added = self.uniforms.add_uniform(
-            name,
-            UniformType::Sampler2D,
-            &sampler as *const Sampler2D as *const std::os::raw::c_void,
-        );
+        let added = unsafe {
+            // SAFETY: sampler is a live aligned Rust value, cloned during this call.
+            self.uniforms.add_uniform(
+                name,
+                UniformType::Sampler2D,
+                &sampler as *const Sampler2D as *const std::os::raw::c_void,
+            )
+        };
         if added {
             self.uniforms.set_all_sampler2d(&self.gl);
         }
@@ -170,15 +173,22 @@ impl Shader {
         let i_resolution = [self.width as f32, self.height as f32, 0.0f32];
         let i_time = 0.0f32;
 
-        self.uniforms.add_uniform("iMouse", UniformType::Vec4, &i_mouse as *const f32 as *const std::os::raw::c_void);
-        self.uniforms.add_uniform("iResolution", UniformType::Vec3, &i_resolution as *const f32 as *const std::os::raw::c_void);
-        self.uniforms.add_uniform("iTime", UniformType::Float, &i_time as *const f32 as *const std::os::raw::c_void);
+        self.uniforms.add_uniform_bytes("iMouse", UniformType::Vec4, crate::uniform::float_slice_bytes(&i_mouse));
+        self.uniforms.add_uniform_bytes("iResolution", UniformType::Vec3, crate::uniform::float_slice_bytes(&i_resolution));
+        self.uniforms.add_uniform_bytes("iTime", UniformType::Float, &i_time.to_ne_bytes());
 
         let black_data = vec![0u8; 4 * 4 * 4];
         for name in &["iChannel0", "iChannel1", "iChannel2", "iChannel3"] {
             let mut sampler = Sampler2D::new();
             sampler.add_rgba32(4, 4, &black_data);
-            self.uniforms.add_uniform(name, UniformType::Sampler2D, &sampler as *const Sampler2D as *const std::os::raw::c_void);
+            unsafe {
+                // SAFETY: sampler is a live aligned Rust value, cloned during this call.
+                self.uniforms.add_uniform(
+                    name,
+                    UniformType::Sampler2D,
+                    &sampler as *const Sampler2D as *const std::os::raw::c_void,
+                )
+            };
         }
     }
 
@@ -429,7 +439,7 @@ impl Shader {
             self.gl.use_program(Some(program));
         }
 
-        self.uniforms.set_uniform_value("iTime", &time as *const f32 as *const std::os::raw::c_void);
+        self.uniforms.set_uniform_value_bytes("iTime", &time.to_ne_bytes());
         self.uniforms.send_all_uniforms(&self.gl);
 
         if self.uses_fbo {

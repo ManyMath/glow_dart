@@ -23,7 +23,24 @@
     }
   ],
   "flutter_package": "glow",
-  "library_name": "libflutter_opengl_rust.so",
+  "runtime_libraries": {
+    "linux": {
+      "name": "libflutter_opengl_rust.so",
+      "bundle_dir": "bundle/lib"
+    },
+    "windows": {
+      "name": "flutter_opengl_rust.dll",
+      "bundle_dir": "runner/Debug",
+      "bundle_root": ".",
+      "executable": "payload_consumer.exe",
+      "flutter_main": "import 'dart:ffi' hide Size;\nimport 'dart:io';\nimport 'package:flutter/material.dart';\nimport 'package:glow/glow.dart';\n\ntypedef _AllocN = Pointer<Uint16> Function(Uint32, IntPtr);\ntypedef _AllocD = Pointer<Uint16> Function(int, int);\ntypedef _FreeN = IntPtr Function(Pointer<Uint16>);\ntypedef _FreeD = int Function(Pointer<Uint16>);\ntypedef _HandleN = IntPtr Function(Pointer<Uint16>);\ntypedef _HandleD = int Function(Pointer<Uint16>);\ntypedef _NameN = Uint32 Function(IntPtr, Pointer<Uint16>, Uint32);\ntypedef _NameD = int Function(int, Pointer<Uint16>, int);\n\n// Full path of a loaded module, via kernel32 only (no extra packages).\nString? loadedPath(String module) {\n  final k32 = DynamicLibrary.open('kernel32.dll');\n  final alloc = k32.lookupFunction<_AllocN, _AllocD>('LocalAlloc');\n  final free = k32.lookupFunction<_FreeN, _FreeD>('LocalFree');\n  final handle = k32.lookupFunction<_HandleN, _HandleD>('GetModuleHandleW');\n  final name = k32.lookupFunction<_NameN, _NameD>('GetModuleFileNameW');\n  final wide = alloc(0x40, (module.length + 1) * 2);\n  final buf = alloc(0x40, 2048);\n  try {\n    for (var i = 0; i < module.length; i++) {\n      wide[i] = module.codeUnitAt(i);\n    }\n    final h = handle(wide);\n    if (h == 0) return null;\n    final n = name(h, buf, 1024);\n    return n == 0 ? null : String.fromCharCodes(buf.asTypedList(n));\n  } finally {\n    free(wide);\n    free(buf);\n  }\n}\n\nString norm(String p) => File(p).absolute.path.replaceAll('/', r'\\').toLowerCase();\n\nvoid main() {\n  WidgetsFlutterBinding.ensureInitialized();\n  final controller = OpenGLController();\n  controller.initializeGL();\n  if (controller.openglFFI.rendererStatus()) {\n    throw StateError('renderer unexpectedly active before surface creation');\n  }\n  if (controller.openglFFI.addIntUniform('payload', 1) ||\n      controller.openglFFI.setIntUniform('payload', 2) ||\n      controller.openglFFI.removeUniform('payload')) {\n    throw StateError('uniform operations succeeded without renderer');\n  }\n  final expected = Platform.environment['GLOW_PAYLOAD_LIBRARY']!;\n  final loaded = loadedPath('flutter_opengl_rust.dll');\n  if (loaded == null || norm(loaded) != norm(expected)) {\n    throw StateError('unexpected native library: $loaded');\n  }\n  final size = controller.openglFFI.getTextureSize();\n  if (size != const Size(-1, -1)) {\n    throw StateError('unexpected initial texture size: $size');\n  }\n  print('Glow native FFI loaded; inactive renderer and uninitialized texture sentinel queried');\n  exit(0);\n}\n",
+      "flutter_runtime_command": [
+        "{executable}"
+      ],
+      "flutter_runtime_environment": {},
+      "runtime_timeout": 120
+    }
+  },
   "flutter_main": "import 'dart:io';\nimport 'package:flutter/material.dart';\nimport 'package:glow/glow.dart';\nvoid main() { WidgetsFlutterBinding.ensureInitialized(); final controller = OpenGLController(); controller.initializeGL(); if (controller.openglFFI.rendererStatus()) throw StateError('renderer unexpectedly active before surface creation'); if (controller.openglFFI.addIntUniform('payload', 1) || controller.openglFFI.setIntUniform('payload', 2) || controller.openglFFI.removeUniform('payload')) throw StateError('uniform operations succeeded without renderer'); final expected = File(Platform.environment['GLOW_PAYLOAD_LIBRARY']!).resolveSymbolicLinksSync(); final mappings = File('/proc/self/maps').readAsLinesSync().where((line) => line.contains('libflutter_opengl_rust.so')).toList(); if (mappings.isEmpty || mappings.any((line) => !line.endsWith(' $expected'))) throw StateError('unexpected native library: $mappings'); final size = controller.openglFFI.getTextureSize(); if (size != const Size(-1, -1)) throw StateError('unexpected initial texture size: $size'); print('Glow native FFI loaded; inactive renderer and uninitialized texture sentinel queried'); exit(0); }\n",
   "flutter_runtime_command": [
     "timeout",
@@ -57,5 +74,6 @@
     "analyze",
     "lib/src/flutter_opengl_ffi.dart",
     "lib/src/opengl_controller_native.dart"
-  ]
+  ],
+  "library_name": "libflutter_opengl_rust.so"
 }

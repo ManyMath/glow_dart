@@ -455,10 +455,10 @@ fn apply_uniform_ops(shader: &mut Shader, ops: &mut Vec<UniformOp>, loop_gl: &gl
                 uniform_type,
                 data,
             } => {
-                shader.uniforms_mut().add_uniform(
+                shader.uniforms_mut().add_uniform_bytes(
                     &name,
                     uniform_type,
-                    data.as_ptr() as *const std::os::raw::c_void,
+                    &data,
                 );
             }
             UniformOp::SetValue { name, data } => {
@@ -473,17 +473,20 @@ fn apply_uniform_ops(shader: &mut Shader, ops: &mut Vec<UniformOp>, loop_gl: &gl
             }
             UniformOp::SetMousePosition { x, y, z, w } => {
                 let mouse = [x, y, z, w];
-                shader.uniforms_mut().set_uniform_value(
+                shader.uniforms_mut().set_uniform_value_bytes(
                     "iMouse",
-                    mouse.as_ptr() as *const std::os::raw::c_void,
+                    crate::uniform::float_slice_bytes(&mouse),
                 );
             }
             UniformOp::AddSampler2D { name, sampler } => {
-                shader.uniforms_mut().add_uniform(
-                    &name,
-                    UniformType::Sampler2D,
-                    &sampler as *const Sampler2D as *const std::os::raw::c_void,
-                );
+                unsafe {
+                    // SAFETY: sampler is a live aligned Rust value, cloned during this call.
+                    shader.uniforms_mut().add_uniform(
+                        &name,
+                        UniformType::Sampler2D,
+                        &sampler as *const Sampler2D as *const std::os::raw::c_void,
+                    )
+                };
             }
             UniformOp::ReplaceSampler2D { name, width, height, data } => {
                 shader.uniforms_mut().replace_sampler2d(&name, width, height, &data);

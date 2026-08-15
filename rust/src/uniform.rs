@@ -70,7 +70,12 @@ impl UniformQueue {
 
     /// Add a uniform from a raw pointer, matching the C++ void* interface.
     /// Returns false if the name already exists.
-    pub fn add_uniform(
+    ///
+    /// # Safety
+    /// `val_ptr` must be non-null and readable for the selected type's full
+    /// size for this call. Scalars/arrays may be unaligned. Sampler2D must be
+    /// a live, aligned Rust Sampler2D, not foreign bytes or a copied Vec header.
+    pub unsafe fn add_uniform(
         &mut self,
         name: &str,
         uniform_type: UniformType,
@@ -83,6 +88,32 @@ impl UniformQueue {
         let value = unsafe { read_uniform_value(uniform_type, val_ptr) };
         self.uniforms.insert(name.to_string(), value);
         true
+    }
+
+    /// Add copied scalar/vector/matrix bytes, rejecting incomplete or extra
+    /// data. Samplers require an owned Rust value through the dedicated path.
+    pub fn add_uniform_bytes(
+        &mut self,
+        name: &str,
+        uniform_type: UniformType,
+        data: &[u8],
+    ) -> bool {
+        let expected = match uniform_type {
+            UniformType::Bool => 1,
+            UniformType::Int | UniformType::Float => 4,
+            UniformType::Vec2 => 8,
+            UniformType::Vec3 => 12,
+            UniformType::Vec4 | UniformType::Mat2 => 16,
+            UniformType::Mat3 => 36,
+            UniformType::Mat4 => 64,
+            UniformType::Sampler2D => return false,
+        };
+        if data.len() != expected {
+            return false;
+        }
+        // SAFETY: the full non-sampler size was checked; the reader supports
+        // unaligned bytes and no borrowed pointer escapes this call.
+        unsafe { self.add_uniform(name, uniform_type, data.as_ptr().cast()) }
     }
 
     /// Remove a uniform. If it is a Sampler2D and renderer is not running,
@@ -187,7 +218,14 @@ impl UniformQueue {
 
     /// Update an existing uniform's value from a raw pointer.
     /// For Sampler2D, val_ptr is treated as raw RGBA pixel data.
-    pub fn set_uniform_value(&mut self, name: &str, val_ptr: *const c_void) -> bool {
+    /// Prefer set_uniform_value_bytes for checked access.
+    ///
+    /// # Safety
+    /// The pointer must be non-null, readable for the full stored value's
+    /// size, and f32-aligned for non-samplers. This legacy method encodes
+    /// Bool/Int as one f32, unlike the typed byte setter. Sampler dimensions
+    /// must be positive, with their RGBA byte count fitting i32 and isize.
+    pub unsafe fn set_uniform_value(&mut self, name: &str, val_ptr: *const c_void) -> bool {
         let Some(existing) = self.uniforms.get_mut(name) else {
             return false;
         };
@@ -341,56 +379,34 @@ impl UniformQueue {
 /// Read a `UniformValue` from a raw pointer based on the given type.
 ///
 /// # Safety
-/// The caller must ensure `val_ptr` points to valid memory of the correct type.
+/// The caller must ensure `val_ptr` points to readable memory of the type's
+/// size. Scalars and arrays may be unaligned: queued values live in byte
+/// buffers. Sampler2D must point to a live, aligned `Sampler2D`.
 unsafe fn read_uniform_value(uniform_type: UniformType, val_ptr: *const c_void) -> UniformValue {
     match uniform_type {
+        // C callers may pass any nonzero byte for true; a Rust bool may not.
         UniformType::Bool => {
-            let v = *(val_ptr as *const bool);
-            UniformValue::Bool(v)
+            UniformValue::Bool(std::ptr::read_unaligned(val_ptr as *const u8) != 0)
         }
-        UniformType::Int => {
-            let v = *(val_ptr as *const i32);
-            UniformValue::Int(v)
-        }
-        UniformType::Float => {
-            let v = *(val_ptr as *const f32);
-            UniformValue::Float(v)
-        }
+        UniformType::Int => UniformValue::Int(std::ptr::read_unaligned(val_ptr as *const i32)),
+        UniformType::Float => UniformValue::Float(std::ptr::read_unaligned(val_ptr as *const f32)),
         UniformType::Vec2 => {
-            let p = val_ptr as *const f32;
-            let mut v = [0.0f32; 2];
-            std::ptr::copy_nonoverlapping(p, v.as_mut_ptr(), 2);
-            UniformValue::Vec2(v)
+            UniformValue::Vec2(std::ptr::read_unaligned(val_ptr as *const [f32; 2]))
         }
         UniformType::Vec3 => {
-            let p = val_ptr as *const f32;
-            let mut v = [0.0f32; 3];
-            std::ptr::copy_nonoverlapping(p, v.as_mut_ptr(), 3);
-            UniformValue::Vec3(v)
+            UniformValue::Vec3(std::ptr::read_unaligned(val_ptr as *const [f32; 3]))
         }
         UniformType::Vec4 => {
-            let p = val_ptr as *const f32;
-            let mut v = [0.0f32; 4];
-            std::ptr::copy_nonoverlapping(p, v.as_mut_ptr(), 4);
-            UniformValue::Vec4(v)
+            UniformValue::Vec4(std::ptr::read_unaligned(val_ptr as *const [f32; 4]))
         }
         UniformType::Mat2 => {
-            let p = val_ptr as *const f32;
-            let mut v = [0.0f32; 4];
-            std::ptr::copy_nonoverlapping(p, v.as_mut_ptr(), 4);
-            UniformValue::Mat2(v)
+            UniformValue::Mat2(std::ptr::read_unaligned(val_ptr as *const [f32; 4]))
         }
         UniformType::Mat3 => {
-            let p = val_ptr as *const f32;
-            let mut v = [0.0f32; 9];
-            std::ptr::copy_nonoverlapping(p, v.as_mut_ptr(), 9);
-            UniformValue::Mat3(v)
+            UniformValue::Mat3(std::ptr::read_unaligned(val_ptr as *const [f32; 9]))
         }
         UniformType::Mat4 => {
-            let p = val_ptr as *const f32;
-            let mut v = [0.0f32; 16];
-            std::ptr::copy_nonoverlapping(p, v.as_mut_ptr(), 16);
-            UniformValue::Mat4(v)
+            UniformValue::Mat4(std::ptr::read_unaligned(val_ptr as *const [f32; 16]))
         }
         UniformType::Sampler2D => {
             let sampler_ref = &*(val_ptr as *const Sampler2D);
@@ -415,6 +431,13 @@ fn float_array<const N: usize>(data: &[u8]) -> Option<[f32; N]> {
         *value = f32::from_ne_bytes(bytes.try_into().ok()?);
     }
     Some(result)
+}
+
+/// Borrow native-endian f32 bytes without alignment assumptions or allocation.
+pub(crate) fn float_slice_bytes(values: &[f32]) -> &[u8] {
+    // SAFETY: f32 has no padding, every byte of the borrowed slice is initialized,
+    // and the byte view has the same lifetime and fits the original allocation.
+    unsafe { std::slice::from_raw_parts(values.as_ptr().cast(), std::mem::size_of_val(values)) }
 }
 
 #[cfg(test)]
@@ -446,6 +469,50 @@ mod byte_update_tests {
         ));
         assert!(!queue.set_uniform_value_bytes("amount", &[0; 3]));
         assert!(matches!(queue.uniforms["count"], UniformValue::Int(-42)));
+    }
+
+    #[test]
+    fn added_values_decode_from_unaligned_queue_bytes() {
+        let mut queue = UniformQueue::new();
+        #[repr(align(4))]
+        struct AlignedBytes([u8; 1 + 16 * 4]);
+        let mut storage = AlignedBytes([0; 1 + 16 * 4]);
+        let bytes = &mut storage.0;
+        bytes[1..5].copy_from_slice(&1.5_f32.to_ne_bytes());
+        // The aligned backing plus offset proves this read is unaligned.
+        let unaligned = bytes[1..].as_ptr() as *const c_void;
+        assert_ne!(unaligned as usize % std::mem::align_of::<f32>(), 0);
+        assert!(unsafe { queue.add_uniform("amount", UniformType::Float, unaligned) });
+        assert!(matches!(queue.uniforms["amount"], UniformValue::Float(v) if v == 1.5));
+        assert!(unsafe { queue.add_uniform("matrix", UniformType::Mat4, unaligned) });
+        assert!(matches!(queue.uniforms["matrix"], UniformValue::Mat4(m) if m[0] == 1.5));
+        bytes[1] = 2;
+        assert!(unsafe {
+            queue.add_uniform(
+                "flag",
+                UniformType::Bool,
+                bytes[1..].as_ptr() as *const c_void,
+            )
+        });
+        assert!(matches!(queue.uniforms["flag"], UniformValue::Bool(true)));
+    }
+
+    #[test]
+    fn copied_adds_reject_short_extra_and_sampler_data() {
+        let mut queue = UniformQueue::new();
+        assert!(!queue.add_uniform_bytes("matrix", UniformType::Mat4, &1.0_f32.to_ne_bytes()));
+        assert!(!queue.add_uniform_bytes("number", UniformType::Int, &[0; 5]));
+        assert!(!queue.add_uniform_bytes("texture", UniformType::Sampler2D, &[0; 64]));
+        assert!(queue.uniforms.is_empty());
+        assert!(queue.add_uniform_bytes("matrix", UniformType::Mat4, &[0; 64]));
+        assert!(!queue.set_uniform_value_bytes("matrix", &1.0_f32.to_ne_bytes()));
+        assert!(
+            matches!(queue.uniforms["matrix"], UniformValue::Mat4(value) if value == [0.0; 16])
+        );
+        let number = i32::MAX;
+        assert!(queue.add_uniform_bytes("number", UniformType::Int, &0_i32.to_ne_bytes()));
+        assert!(queue.set_uniform_value_bytes("number", &number.to_ne_bytes()));
+        assert!(matches!(queue.uniforms["number"], UniformValue::Int(value) if value == number));
     }
 
     #[test]
@@ -484,6 +551,10 @@ mod byte_update_tests {
         queue
             .uniforms
             .insert("image".into(), UniformValue::Sampler2D(sampler));
+        assert!(!queue.set_uniform_value_bytes("image", &1.0_f32.to_ne_bytes()));
+        assert!(
+            matches!(&queue.uniforms["image"], UniformValue::Sampler2D(value) if value.data == vec![1; 256])
+        );
         assert!(!queue.set_uniform_value_bytes("image", &[2; 64]));
         assert!(queue.set_uniform_value_bytes("image", &[3; 256]));
         let UniformValue::Sampler2D(sampler) = &queue.uniforms["image"] else {

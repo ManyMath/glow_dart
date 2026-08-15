@@ -1,10 +1,12 @@
 ## 0.0.2
 
 - Use injected process execution for Android Rust builds with Gradle 9.
-
 - Repair Flutter package target names, generated header paths, desktop bundling and Apple podspec names.
 - Use a length-aware uniform setter and validate queued values; legacy unsized C setter now fails safely.
+- Decode queued additions without alignment assumptions, reject foreign sampler structs, and validate byte lengths for queued and WASM updates.
+- Retained Rust raw-pointer uniform methods now require `unsafe` and documented valid buffers; public C symbols are unchanged.
 - Match Dart FFI boolean and void declarations to the Rust C ABI.
+- Drop the unused `permission_handler` dependency, which forced its Windows plugin into every app; the example still uses it.
 - Verify actual package archives with a fresh Linux Flutter build and runtime FFI smoke.
 
 ## 0.0.1

@@ -17,8 +17,6 @@ dependencies:
 
   image: ^4.0.13
 
-  permission_handler: ^11.0.0
-
   web: ^1.1.0
 
 dev_dependencies:
