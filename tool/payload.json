@@ -65,6 +65,12 @@
     ],
     "windows": [
       "{host_arch}-pc-windows-msvc"
+    ],
+    "apk": [
+      "aarch64-linux-android",
+      "armv7-linux-androideabi",
+      "x86_64-linux-android",
+      "i686-linux-android"
     ]
   },
   "relocate_flutter_bundle": true,
@@ -75,5 +81,19 @@
     "lib/src/flutter_opengl_ffi.dart",
     "lib/src/opengl_controller_native.dart"
   ],
-  "library_name": "libflutter_opengl_rust.so"
+  "library_name": "libflutter_opengl_rust.so",
+  "android": {
+    "rust_toolchain": "stable",
+    "ndk": "28.2.13676358",
+    "platform": "android-36",
+    "build_tools": "36.0.0",
+    "library": "libflutter_opengl_plugin.so",
+    "apk_abis": [
+      "arm64-v8a",
+      "armeabi-v7a",
+      "x86_64"
+    ],
+    "cmake": "3.22.1",
+    "cargo_ndk": true
+  }
 }

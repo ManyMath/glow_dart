@@ -12,6 +12,13 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 
 class PayloadTests(unittest.TestCase):
+    def test_same_named_library_on_path_is_found(self):
+        # A real PATH entry, not a mocked which(): ".dll" is not in PATHEXT.
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "demo.dll").write_bytes(b"dll")
+            self.assertEqual(Path(gate.library_on_path("demo.dll", tmp)), Path(tmp) / "demo.dll")
+            self.assertIsNone(gate.library_on_path("other.dll", tmp))
+
     def test_debug_macos_preflights_only_selected_host_architecture(self):
         config = {"rust_targets": {"macos": ["{host_arch}-apple-darwin"], "windows": ["{host_arch}-pc-windows-msvc"]}}
         self.assertEqual(gate.required_rust_targets(config, "macos", "arm64"), ["aarch64-apple-darwin"])

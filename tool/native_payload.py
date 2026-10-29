@@ -169,6 +169,12 @@ def prefer_real_toolchain(channel, cwd, log):
     os.environ.setdefault("RUSTUP_WINDOWS_PATH_ADD_BIN", "1")
 
 
+def library_on_path(name, path):
+    """A same-named library on PATH. F_OK: Windows which() otherwise only
+    tries PATHEXT names, so a ".dll" would never be found."""
+    return shutil.which(name, mode=os.F_OK, path=path)
+
+
 def runtime_library(config, target):
     """Bundled native library smoke for a Flutter build target, or None.
 
@@ -198,7 +204,11 @@ def main():
     version = run(["dart", "--version"], repo, output / "dart-version.log")
     if f"Dart SDK version: {config['dart_sdk']} " not in version:
         raise ValueError(f"Unsupported Dart SDK for hidden archive flag: {version.strip()}")
-    if config.get("rust_toolchain"):
+    build_env = None
+    if args.target == "apk":
+        import android_payload as android_gate
+        build_env = android_gate.prepare(config, repo, output, run)
+    if config.get("rust_toolchain") and args.target != "apk":
         channel = config["rust_toolchain"]
         installed = run(["rustup", "toolchain", "list"], repo, output / "rust-toolchains.log")
         if not any(line.split()[0] == channel or line.split()[0].startswith(channel + "-") for line in installed.splitlines()):
@@ -259,7 +269,11 @@ def main():
     library = runtime_library(config, args.target)
     (consumer / "lib/main.dart").write_text((library or {}).get("flutter_main", config["flutter_main"]))
     run(["flutter", "pub", "get"], consumer, output / "flutter-get.log")
-    run(["flutter", "build", args.target, "--debug"] + (["--no-codesign"] if args.target == "ios" else []), consumer, output / "flutter-build.log")
+    if args.target == "apk":
+        android_gate.configure_consumer(consumer, config, build_env, output, run)
+    run(["flutter", "build", args.target, "--debug"] + (["--no-codesign"] if args.target == "ios" else []), consumer, output / "flutter-build.log", env=build_env)
+    if args.target == "apk":
+        report["android_artifact"] = android_gate.artifact(consumer, config)
     report["flutter_build"] = "passed"
     # Per-repository smoke program explicitly loads the native library and
     # tests minimal behavior without requiring a physical capture device.
@@ -271,7 +285,7 @@ def main():
         if len(bundled) != 1:
             raise RuntimeError(f"Expected exactly one bundled native library, found {bundled}")
         # The loader can fall back to a same-named library on PATH.
-        if os.name == "nt" and shutil.which(library["name"], path=os.environ.get("PATH")):
+        if os.name == "nt" and library_on_path(library["name"], os.environ.get("PATH")):
             raise RuntimeError(f"{library['name']} is on PATH; the smoke could load it instead of the bundle")
         report["native_library"] = {"path": bundled[0].relative_to(consumer).as_posix(),
                                     "sha256": hashlib.sha256(bundled[0].read_bytes()).hexdigest()}
