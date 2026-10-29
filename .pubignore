@@ -32,7 +32,7 @@ build/
 android/src/opencv
 WORK/
 BUILD_LIBS/
-SCRIPTS/
+SCRIPTS/*
 !SCRIPTS/setupOpenCV-android.sh
 
 #libraries to download (no longer needed for Windows; GLM is in src/glm, GLEW is bundled)
@@ -46,3 +46,6 @@ example/web/pkg
 pkg/
 tool/
 .gitea/
+
+# README images are linked from GitHub; keep them out of the archive.
+images/
